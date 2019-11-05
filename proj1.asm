@@ -1,4 +1,4 @@
-assume cs:codeseg, ds:dataseg, ss:stackseg, es:table
+assume cs:codeseg, ds:dataseg, ss:stackseg
 
 dataseg segment
     ; +0
@@ -8,21 +8,149 @@ dataseg segment
     ; +84
     dd 16, 22, 382, 1356, 2390, 8000, 16000, 24486, 50065, 97479, 140417, 197514
     dd 345980, 590827, 803530, 1183000, 1843000, 2759000, 3753000, 4649000, 5937000
-    ; +164
+    ; +168
     dw 3, 7, 9, 13, 28, 38, 130, 220, 476, 778, 1001, 1442, 2258, 2793, 4037, 5635, 8226
     dw 11542, 14430, 15257, 17800
+    ; +210
+    dd 5 dup(?) ;数据缓冲区
 dataseg ends
 
 ; table segment
 ;     db 21 dup('year summ ne ?? ')
 ; table ends
 
-stackseg segment
+stackseg segment stack
     dw 32 dup(?)
 stackseg ends
 
 codeseg segment
 start:
+    mov ax, dataseg ;初始化数据段
+    mov ds, ax
+
+    mov ax, stackseg ;初始化栈
+    mov ss, ax
+    mov sp, 40h
+
+    mov cx, 21
+    mov ax, 0
+print_all_years:
+    mov di, 210 ;设置字符串转移的目的地为缓冲区+210
+    push cx  ;保存cx
+    mov cx, 4 ;设置内循环循环次数
+    xor si, si
+transfer_one_char:
+    mov dl, [si + bx]
+    mov [di], dl 
+
+    inc si
+    inc di
+    loop transfer_one_char
+
+    mov byte ptr[di], 0
+
+    pop cx
+
+    add bx, 4
+
+    push dx
+    push cx
+    mov dh, al 
+    mov dl, 0
+    mov cl, 2
+    mov si, 210
+    call show_str
+
+    pop cx
+    pop dx
+
+    inc ax
+    loop print_all_years
+
+    mov cx, 21
+    xor ax, ax
+    mov bx, 84
+
+print_all_salary:
+    push ax
+    mov ax, [bx]
+    mov dx, [bx + 2]
+    mov si, 210
+    call dw_dtoc
+    pop ax
+
+    push dx
+    push cx
+    mov dh, al
+    mov dl, 8
+    mov cl, 2
+    mov si, 210
+    call show_str
+
+    pop cx
+    pop dx
+
+    add bx, 4
+    inc ax
+    loop print_all_salary
+
+    mov cx, 21
+    mov bx, 168
+    mov ax, 0
+print_all_numbers_of_workers:
+    push ax
+    mov ax, [bx]
+    mov si, 210
+    call dtoc
+    pop ax
+
+    push dx
+    push cx
+    mov dh, al
+    mov dl, 18
+    mov cl, 2
+    mov si, 210
+    call show_str
+
+    pop cx
+    pop dx
+
+    add bx, 2
+    inc ax
+    loop print_all_numbers_of_workers
+
+    mov cx, 21
+    mov ax, 0
+
+    mov bp, 84
+    mov bx, 168
+print_all_average_salary:
+
+    push ax
+    push cx
+    mov ax, ds:[bp]
+    mov dx, ds:[bp + 2]
+    mov cx, [bx]
+    call divdw
+    ;结果存在ax中
+
+    mov si, 210
+    call dtoc 
+    pop cx
+    pop ax
+
+    push cx
+    mov dh, al 
+    mov dl, 25
+    mov cl, 2
+    mov si, 210
+    call show_str
+    pop cx
+
+    inc ax
+    add bx, 2
+    add bp, 4
+    loop print_all_average_salary
 
     mov ax, 4c00h
     int 21h
@@ -37,7 +165,8 @@ dtoc:
     push dx
     push si
 
-    mov bx, si
+    mov bx, si ;将数据地址存入基址寄存器bx
+
 dtoc_cycle:
     xor dx, dx
     mov cx, 10
@@ -47,17 +176,19 @@ dtoc_cycle:
     ; 参数：ax被除数低16位，dx被除数高16位，cx：除数
     ; 返回值：ax结果低16位，dx结果高16位，cx：余数
     add cl, 30h
-    mov [bx], cl
+    mov [bx], cl ;将数字转化为ascii码
     inc bx
-    cmp ax, 0
+    cmp ax, 0 ;如果结果为0则说明转化结束
 
-    jz dtoc_reverse
+    jz dtoc_reverse_str
     jmp dtoc_cycle
 
 
-dtoc_reverse:
+dtoc_reverse_str:
+    mov byte ptr[bx], 0
     dec bx
-dtoc_reverse2:
+dtoc_reverse_str_inner:
+
     cmp bx, si
     jle dtoc_end
     mov cl, [bx]
@@ -67,7 +198,7 @@ dtoc_reverse2:
 
     inc si
     dec bx
-    jmp dtoc_reverse2
+    jmp dtoc_reverse_str_inner
 
 dtoc_end:
     pop si
@@ -77,6 +208,56 @@ dtoc_end:
     pop ax
     ret
 
+;将dword型数据转化为十进制字符串，结果存在si指向的空间中
+; 参数：ax 要转换的数的低十六位，dx要转换的数的高十六位
+dw_dtoc:
+    push ax
+    push bx
+    push cx
+    push dx
+    push si
+
+    mov bx, si ;将数据地址存入基址寄存器bx
+
+dw_dtoc_cycle_ax:
+    mov cx, 10
+    ;设置每次除法的除数
+
+    call divdw
+    ; 参数：ax被除数低16位，dx被除数高16位，cx：除数
+    ; 返回值：ax结果低16位，dx结果高16位，cx：余数
+    add cl, 30h
+    mov [bx], cl ;将数字转化为ascii码
+    inc bx
+    cmp ax, 0 ;如果结果为0则说明转化结束
+
+    jnz dw_dtoc_cycle_ax
+
+dw_dtoc_reverse_str:
+    mov byte ptr[bx], 0
+    dec bx
+dw_dtoc_reverse_str_inner:
+
+    cmp bx, si
+    jle dw_dtoc_end
+    mov cl, [bx]
+    mov dh, [si]
+    mov [si], cl
+    mov [bx], dh
+
+    inc si
+    dec bx
+    jmp dw_dtoc_reverse_str_inner
+
+dw_dtoc_end:
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+;打印内存中的字符串
 ;参数：dh 行号，dl 列号，cl 颜色，ds:si指向字符串的首地址
 show_str:
     ;使用的寄存器入栈：
@@ -124,6 +305,9 @@ show_str_finish:
     mov es, bx
 
     ret
+
+
+
 
 ; 参数：ax 被除数低16位，dx被除数高16位，cx：除数
 ; 返回值：ax结果低16位，dx结果高16位，cx：余数
